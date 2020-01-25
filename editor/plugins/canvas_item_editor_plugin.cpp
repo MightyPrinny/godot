@@ -476,11 +476,12 @@ void CanvasItemEditor::_unhandled_key_input(const Ref<InputEvent> &p_ev) {
 	}
 
 	if (k->is_pressed() && !k->get_control() && !k->is_echo()) {
-		if ((grid_snap_active || show_grid) && multiply_grid_step_shortcut.is_valid() && multiply_grid_step_shortcut->is_shortcut(p_ev)) {
+		bool show_grid = grid_visibility_op == ALWAYS_SHOW_GRID || (grid_snap_active && grid_visibility_op == SHOW_GRID_WHEN_SNAPPING_TO_GRID);
+		if (show_grid && multiply_grid_step_shortcut.is_valid() && multiply_grid_step_shortcut->is_shortcut(p_ev)) {
 			// Multiply the grid size
 			grid_step_multiplier = MIN(grid_step_multiplier + 1, 12);
 			viewport->update();
-		} else if ((grid_snap_active || show_grid) && divide_grid_step_shortcut.is_valid() && divide_grid_step_shortcut->is_shortcut(p_ev)) {
+		} else if (show_grid && divide_grid_step_shortcut.is_valid() && divide_grid_step_shortcut->is_shortcut(p_ev)) {
 			// Divide the grid size
 			Point2 new_grid_step = grid_step * Math::pow(2.0, grid_step_multiplier - 1);
 			if (new_grid_step.x >= 1.0 && new_grid_step.y >= 1.0)
@@ -2637,7 +2638,9 @@ void CanvasItemEditor::_draw_rulers() {
 
 	// The rule transform
 	Transform2D ruler_transform = Transform2D();
-	if (show_grid || grid_snap_active) {
+	bool show_grid = grid_visibility_op == ALWAYS_SHOW_GRID || (grid_snap_active && grid_visibility_op == SHOW_GRID_WHEN_SNAPPING_TO_GRID);
+
+	if (show_grid) { //KEEP AN EYE THIS
 		List<CanvasItem *> selection = _get_edited_canvas_items();
 		if (snap_relative && selection.size() > 0) {
 			ruler_transform.translate(_get_encompassing_rect_from_list(selection).position);
@@ -2717,8 +2720,8 @@ void CanvasItemEditor::_draw_rulers() {
 }
 
 void CanvasItemEditor::_draw_grid() {
-
-	if (show_grid || grid_snap_active) {
+	bool show_grid = grid_visibility_op == ALWAYS_SHOW_GRID || (grid_snap_active && grid_visibility_op == SHOW_GRID_WHEN_SNAPPING_TO_GRID);
+	if (show_grid) {
 		// Draw the grid
 		Vector2 real_grid_offset;
 		const List<CanvasItem *> selection = _get_edited_canvas_items();
@@ -4384,11 +4387,35 @@ void CanvasItemEditor::_popup_callback(int p_op) {
 
 	last_option = MenuOption(p_op);
 	switch (p_op) {
+		case TOGGLE_GRID: {
+			int prev_grid_visibility_op = grid_visibility_op;
 
-		case SHOW_GRID: {
-			show_grid = !show_grid;
-			int idx = view_menu->get_popup()->get_item_index(SHOW_GRID);
-			view_menu->get_popup()->set_item_checked(idx, show_grid);
+			switch(prev_grid_visibility_op){
+				case ALWAYS_SHOW_GRID:{
+					grid_visibility_op = ALWAYS_HIDE_GRID;
+				}break;
+				case SHOW_GRID_WHEN_SNAPPING_TO_GRID:{
+					grid_visibility_op = grid_snap_active?ALWAYS_HIDE_GRID:ALWAYS_SHOW_GRID;
+				}break;
+				case ALWAYS_HIDE_GRID:{
+					grid_visibility_op = grid_snap_active?SHOW_GRID_WHEN_SNAPPING_TO_GRID:ALWAYS_SHOW_GRID;
+				}break;
+			}
+			grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(prev_grid_visibility_op), false);
+			grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(grid_visibility_op), true);
+			
+			viewport->update();
+		} break;
+		case ALWAYS_SHOW_GRID:
+		case SHOW_GRID_WHEN_SNAPPING_TO_GRID:
+		case ALWAYS_HIDE_GRID: {
+			if(grid_visibility_op != p_op){
+				int prev_grid_visibility_op = grid_visibility_op;
+				grid_visibility_op = p_op;
+				grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(prev_grid_visibility_op), false);
+				grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(grid_visibility_op), true);
+			} 
+
 			viewport->update();
 		} break;
 		case SHOW_ORIGIN: {
@@ -5026,7 +5053,7 @@ Dictionary CanvasItemEditor::get_state() const {
 	state["snap_node_center"] = snap_node_center;
 	state["snap_other_nodes"] = snap_other_nodes;
 	state["snap_guides"] = snap_guides;
-	state["show_grid"] = show_grid;
+	state["grid_visibility_op"] = grid_visibility_op;
 	state["show_origin"] = show_origin;
 	state["show_viewport"] = show_viewport;
 	state["show_rulers"] = show_rulers;
@@ -5129,10 +5156,12 @@ void CanvasItemEditor::set_state(const Dictionary &p_state) {
 		smartsnap_config_popup->set_item_checked(idx, snap_guides);
 	}
 
-	if (state.has("show_grid")) {
-		show_grid = state["show_grid"];
-		int idx = view_menu->get_popup()->get_item_index(SHOW_GRID);
-		view_menu->get_popup()->set_item_checked(idx, show_grid);
+	if (state.has("grid_visibility_op")) {
+		grid_visibility_op = state["grid_visibility_op"];
+		grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(ALWAYS_SHOW_GRID), false);
+		grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(ALWAYS_HIDE_GRID), false);
+		grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(SHOW_GRID_WHEN_SNAPPING_TO_GRID), false);
+		grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(grid_visibility_op), true);
 	}
 
 	if (state.has("show_origin")) {
@@ -5258,7 +5287,7 @@ CanvasItemEditor::CanvasItemEditor(EditorNode *p_editor) {
 	key_rot = true;
 	key_scale = false;
 
-	show_grid = false;
+	grid_visibility_op = SHOW_GRID_WHEN_SNAPPING_TO_GRID;
 	show_origin = true;
 	show_viewport = true;
 	show_helpers = false;
@@ -5588,7 +5617,18 @@ CanvasItemEditor::CanvasItemEditor(EditorNode *p_editor) {
 
 	p = view_menu->get_popup();
 	p->set_hide_on_checkable_item_selection(false);
-	p->add_check_shortcut(ED_SHORTCUT("canvas_item_editor/show_grid", TTR("Always Show Grid"), KEY_G), SHOW_GRID);
+
+	grid_visibility_menu = memnew(PopupMenu);
+	grid_visibility_menu->connect("id_pressed",this,"_popup_callback");
+	grid_visibility_menu->set_name("GridVisibilityMenu");
+	p->add_child(grid_visibility_menu);
+	p->add_submenu_item("Grid Visibility","GridVisibilityMenu",GRID_VISIBILITY_MENU);
+	grid_visibility_menu->add_radio_check_item(TTR("Show"),ALWAYS_SHOW_GRID);
+	grid_visibility_menu->add_radio_check_item(TTR("Show When Snapping To Grid"),SHOW_GRID_WHEN_SNAPPING_TO_GRID);
+	grid_visibility_menu->add_radio_check_item(TTR("Hide"),ALWAYS_HIDE_GRID);
+	grid_visibility_menu->add_shortcut(ED_SHORTCUT("canvas_item_editor/show_grid",TTR("Toggle Grid"),KEY_G),TOGGLE_GRID);
+	grid_visibility_menu->set_item_checked(grid_visibility_menu->get_item_index(grid_visibility_op),true);
+
 	p->add_check_shortcut(ED_SHORTCUT("canvas_item_editor/show_helpers", TTR("Show Helpers"), KEY_H), SHOW_HELPERS);
 	p->add_check_shortcut(ED_SHORTCUT("canvas_item_editor/show_rulers", TTR("Show Rulers")), SHOW_RULERS);
 	p->add_check_shortcut(ED_SHORTCUT("canvas_item_editor/show_guides", TTR("Show Guides"), KEY_Y), SHOW_GUIDES);

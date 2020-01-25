@@ -112,7 +112,11 @@ private:
 		SNAP_RELATIVE,
 		SNAP_CONFIGURE,
 		SNAP_USE_PIXEL,
-		SHOW_GRID,
+		GRID_VISIBILITY_MENU,
+		ALWAYS_SHOW_GRID,
+		SHOW_GRID_WHEN_SNAPPING_TO_GRID,
+		ALWAYS_HIDE_GRID,
+		TOGGLE_GRID,
 		SHOW_HELPERS,
 		SHOW_RULERS,
 		SHOW_GUIDES,
@@ -241,7 +245,7 @@ private:
 	VBoxContainer *info_overlay;
 
 	Transform2D transform;
-	bool show_grid;
+	int grid_visibility_op;
 	bool show_rulers;
 	bool show_guides;
 	bool show_origin;
@@ -367,6 +371,7 @@ private:
 	MenuButton *skeleton_menu;
 	ToolButton *override_camera_button;
 	MenuButton *view_menu;
+	PopupMenu *grid_visibility_menu;
 	HBoxContainer *animation_hb;
 	MenuButton *animation_menu;
 
